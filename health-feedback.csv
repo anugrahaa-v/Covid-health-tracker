@@ -1,0 +1,5 @@
+Text,Symptoms,Severity
+"I have fever and cough",fever,cough,3
+"My breathing is normal",breathing,1
+"I feel very tired",fatigue,2
+"Shortness of breath and headache",respiratory,headache,4
