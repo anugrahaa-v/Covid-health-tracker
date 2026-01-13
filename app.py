@@ -2,13 +2,16 @@ import streamlit as st
 import pandas as pd
 from textblob import TextBlob
 import plotly.express as px
+import plotly.figure_factory as ff
 import seaborn as sns
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+from sklearn.preprocessing import LabelEncoder
+from sklearn.cluster import KMeans
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="🩺 COVID Health Tracker", layout="wide", page_icon="💉")
-st.title("🩺 COVID / Health Tracker Dashboard")
+st.title("🩺 COVID / Health Tracker Dashboard (Upgraded)")
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.header("Upload Your CSV")
@@ -51,7 +54,7 @@ def classify_symptom(text):
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     
-    # --- AI/ML Features ---
+    # --- AI/ML FEATURES ---
     df['Sentiment'] = df['Text'].apply(sentiment_analysis)
     df['Risk'] = df['Severity'].apply(risk_level)
     df['Symptom_Category'] = df['Text'].apply(classify_symptom)
@@ -67,14 +70,23 @@ if uploaded_file:
     
     # --- SUMMARY CARDS ---
     st.subheader("📊 Summary Metrics")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total Reports", len(filtered_df))
     col2.metric("High Risk ⚠️", len(filtered_df[filtered_df['Risk']=="High"]))
     col3.metric("Medium Risk ⚡", len(filtered_df[filtered_df['Risk']=="Medium"]))
     col4.metric("Low Risk ✅", len(filtered_df[filtered_df['Risk']=="Low"]))
+    col5.metric("Positive Sentiment 🌟", len(filtered_df[filtered_df['Sentiment']=="Positive"]))
+    
+    # --- DOWNLOAD FILTERED CSV ---
+    st.download_button(
+        "📥 Download Filtered Data",
+        filtered_df.to_csv(index=False),
+        file_name="filtered_health_data.csv",
+        mime="text/csv"
+    )
     
     # --- TABS FOR VISUALS ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Sentiment", "Symptoms", "VBar Graphs", "Trends", "Word Cloud"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Sentiment", "Symptoms", "VBar Graphs", "Trends", "Word Cloud", "Clustering"])
     
     # --- SENTIMENT DOUGHNUT CHART ---
     with tab1:
@@ -121,11 +133,11 @@ if uploaded_file:
     # --- TREND LINE CHART ---
     with tab4:
         if 'Date' in filtered_df.columns:
-            st.markdown("### Severity Trend Over Time")
+            st.markdown("### Symptom Trend Over Time")
             filtered_df['Date'] = pd.to_datetime(filtered_df['Date'])
             trend = filtered_df.groupby(['Date','Symptom_Category']).size().reset_index(name='Count')
             fig_line = px.line(trend, x='Date', y='Count', color='Symptom_Category', markers=True,
-                               title="Symptom Trend Over Time")
+                               title="Symptom Trend Over Time", line_shape='linear')
             st.plotly_chart(fig_line, use_container_width=True)
         else:
             st.info("Add a 'Date' column in your CSV to view trends over time.")
@@ -139,6 +151,27 @@ if uploaded_file:
         plt.imshow(wc, interpolation='bilinear')
         plt.axis('off')
         st.pyplot(plt)
+    
+    # --- CLUSTERING ---
+    with tab6:
+        st.markdown("### Symptom Patterns Clustering")
+        # Encode symptoms + risk for clustering
+        le = LabelEncoder()
+        filtered_df['Symptom_Num'] = le.fit_transform(filtered_df['Symptom_Category'])
+        filtered_df['Risk_Num'] = le.fit_transform(filtered_df['Risk'])
+        X = filtered_df[['Symptom_Num','Severity','Risk_Num']]
+        
+        # KMeans clustering
+        kmeans = KMeans(n_clusters=3, random_state=42)
+        filtered_df['Cluster'] = kmeans.fit_predict(X)
+        
+        fig_cluster = px.scatter(
+            filtered_df, x='Symptom_Num', y='Severity', color='Cluster',
+            hover_data=['Text','Symptom_Category','Risk','Sentiment'],
+            title="Patient Clusters by Symptom & Severity",
+            color_continuous_scale=px.colors.sequential.Viridis
+        )
+        st.plotly_chart(fig_cluster, use_container_width=True)
     
     # --- TOP HIGH-RISK REPORTS ---
     st.subheader("🔴 Top High Risk Reports")
